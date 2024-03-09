@@ -174,9 +174,9 @@ It also comes with a KerasProgressBar replica, which inherits from this class an
 from flamekit.pbars import KerasProgressBar 
 
 # Customize the progress bar
-pbar = KerasProgressBar(pbar_size:int=30, ascii='.>=', desc_above=True, show_elapsed_time=True,
-                 show_rate=True, show_postfix=True, show_n_fmt=True, show_total_fmt=True,
-                 pbar_frames=('[', ']'))
+pbar = KerasProgressBar(pbar_size:int=30, ascii='.>=', desc_above=True, show_desc=True,
+                 show_elapsed_time=True, show_rate=True, show_postfix=True, show_n_fmt=True,
+                 show_total_fmt=True, pbar_frames=('[', ']'))
 
 history = trainer.fit(
     ...,
