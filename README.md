@@ -170,6 +170,19 @@ Epoch 2/10: 100% |████████████████████�
 Epoch 3/10: 100% |██████████████████████████████| 50/50 [00:00<00:00, 96.45 steps/s, loss=0.0967]
 ```
 It also comes with a KerasProgressBar replica, which inherits from this class and tries to replicate the Keras design as much as possible:
+```python
+from flamekit.pbars import KerasProgressBar 
+
+# Customize the progress bar
+pbar = KerasProgressBar(pbar_size:int=30, ascii='.>=', desc_above=True, show_elapsed_time=True,
+                 show_rate=True, show_postfix=True, show_n_fmt=True, show_total_fmt=True,
+                 pbar_frames=('[', ']'))
+
+history = trainer.fit(
+    ...,
+    callbacks=[pbar]
+)
+```
 ```
 Epoch 1/10
 50/50 [==============================] - 00:00 77.64 steps/s, loss=0.303 

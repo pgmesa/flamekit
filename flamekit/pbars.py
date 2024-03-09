@@ -6,7 +6,12 @@ from flamekit.callbacks import Callback
 class ProgressBar(Callback):
     """ Base class for Progress Bars """
     
-    def create_pbar(self, *args, **kwargs):
+    def __init__(self, desc_above=False, show_desc=True) -> None:
+        super().__init__()
+        self.desc_above = desc_above
+        self.show_desc = show_desc
+    
+    def create_pbar(self, desc, total):
         """ Creates the progress bar. """
         raise NotImplementedError
         
@@ -21,10 +26,13 @@ class ProgressBar(Callback):
     # ============== Fit ==============
     def on_train_epoch_start(self, trainer, model):
         if self.pbar is not None: self.pbar.close()
-        desc = f"Epoch {trainer.current_epoch + 1}/{trainer.max_epochs}"
-        if self.desc_above:
-            print(desc); desc = ''
-        self.pbar = self.create_pbar(desc=desc, total=trainer.num_training_batches, leave=True)
+        desc = None
+        if self.show_desc:
+            desc = f"Epoch {trainer.current_epoch + 1}/{trainer.max_epochs}"
+            if self.desc_above:
+                print(desc)
+                desc = None
+        self.pbar = self.create_pbar(desc=desc, total=trainer.num_training_batches)
     
     def on_train_batch_end(self, trainer, model, outputs, batch, batch_idx) -> None:
         self.pbar.update(1)
@@ -43,10 +51,13 @@ class ProgressBar(Callback):
         self.pbar.close()
     # ============== Predict ==============
     def on_predict_epoch_start(self, trainer, model) -> None:
-        desc = f"Predicting"
-        if self.desc_above:
-            print(desc); desc = ''
-        self.predict_pbar = self.create_pbar(desc=desc, total=trainer.num_predict_batches, leave=True)
+        desc = None
+        if self.show_desc:
+            desc = f"Predicting"
+            if self.desc_above:
+                print(desc)
+                desc = None 
+        self.predict_pbar = self.create_pbar(desc=desc, total=trainer.num_predict_batches)
         
     def on_predict_batch_end(self, trainer, model, outputs, batch, batch_idx, dataloader_idx=0) -> None:
         self.predict_pbar.update(1)
@@ -92,16 +103,14 @@ class TQDMProgressBar(ProgressBar):
             - '░▒█'
             - ' ▁▂▃▄▅▆▇█'
         """ 
-        super().__init__()
+        super().__init__(desc_above=desc_above, show_desc=show_desc)
         self.ascii = ascii
         self.l_bar = l_bar
         self.r_bar = r_bar
         self.size = pbar_size
-        self.desc_above = desc_above
         self.pbar_frames = pbar_frames
         
         self.desc_str = '{desc}'
-        self.show_desc = show_desc
         self.elapsed_time_str = '{elapsed}'
         self.show_elapsed_time = show_elapsed_time
         self.remaining_time_str = '{remaining}'
@@ -123,7 +132,7 @@ class TQDMProgressBar(ProgressBar):
         self.pbar = None
         self.predict_pbar = None
     
-    def create_pbar(self, desc=None, total=None, position=0, leave=False) -> tqdm.tqdm:
+    def create_pbar(self, desc, total) -> tqdm.tqdm:
         """ Creates the progress bar. """
         pbar_format = self.build_pbar_format()
         pbar_format = pbar_format.replace('{bar}', '{bar'+':'+str(self.size)+'}')
@@ -132,9 +141,7 @@ class TQDMProgressBar(ProgressBar):
             bar_format=pbar_format,
             unit=' steps',
             ascii=self.ascii,
-            total=total,
-            leave=leave,
-            position=position)
+            total=total)
         
     def update_pbar_metrics(self, pbar, metrics):
         """ Updates the progress bar with the given metrics. """
@@ -150,11 +157,15 @@ class TQDMProgressBar(ProgressBar):
         l_bar = self.l_bar
         if l_bar is None:
             l_bar = ''
-            if self.show_desc:
-                l_bar += '{desc}:'
+            if self.show_desc and not self.desc_above:
+                l_bar += self.desc_str + ':'
             if self.show_percentage:
-                l_bar += f' {self.percentage_str}%'
-            l_bar += ' ' + self.pbar_frames[0]
+                if self.show_desc and not self.desc_above:
+                    l_bar += ' '
+                l_bar += f'{self.percentage_str}%'
+            
+            if len(l_bar) > 0: l_bar += ' '
+            l_bar += self.pbar_frames[0]
            
         r_bar = self.r_bar 
         if r_bar is None:
@@ -175,26 +186,23 @@ class TQDMProgressBar(ProgressBar):
                     if self.show_elapsed_time:
                         r_bar += ', '
                     r_bar += self.rate_str
-                
-                if self.show_postfix:
-                    r_bar += self.postfix_str
-                r_bar += "]"
-            elif self.show_postfix:
+                r_bar += self.postfix_str + "]"
+            else:
                 r_bar += self.postfix_str
                     
         pbar_format = l_bar + '{bar}' + r_bar
         return pbar_format
-
         
+    
 class KerasProgressBar(TQDMProgressBar):
     """ 
     Tries to replicate Keras Progress bar design using TQDM.
     """
     
-    def __init__(self, pbar_size:int=30, ascii='.>=', desc_above=True, show_elapsed_time=True,
+    def __init__(self, pbar_size:int=30, ascii='.>=', desc_above=True, show_desc=True, show_elapsed_time=True,
                  show_rate=True, show_postfix=True, show_n_fmt=True, show_total_fmt=True,
                  pbar_frames=('[', ']')) -> None:
-        super().__init__(pbar_size=pbar_size, ascii=ascii, desc_above=desc_above, show_desc=False,
+        super().__init__(pbar_size=pbar_size, ascii=ascii, desc_above=desc_above, show_desc=show_desc,
                          show_elapsed_time=show_elapsed_time, show_rate=show_rate, show_postfix=show_postfix,
                          show_n_fmt=show_n_fmt, show_total_fmt=show_total_fmt, show_percentage=False, 
                          pbar_frames=pbar_frames, l_bar=None, r_bar=None)
@@ -203,11 +211,17 @@ class KerasProgressBar(TQDMProgressBar):
         l_bar = self.l_bar
         if l_bar is None:
             l_bar = ''
+            if self.show_desc and not self.desc_above:
+                l_bar += self.desc_str + ':'
+                
             if self.show_n_fmt:
+                if self.show_desc and not self.desc_above:
+                    l_bar += ' '
                 l_bar += f'{self.n_fmt_str}'
                 if self.show_total_fmt:
                     l_bar += f'/{self.total_fmt_str}'
-                l_bar += ' '
+                
+            if len(l_bar) > 0: l_bar += ' '
             l_bar += self.pbar_frames[0]
            
         r_bar = self.r_bar 
