@@ -17,6 +17,14 @@ MIN_MODE = 'min'
 MAX_MODE = 'max'
              
 class TorchTrainer:
+    """ 
+    Class for performing training and evaluation over a PyTorch model.
+    
+    This class facilitates various aspects of the training process, including checkpoint saving,
+    callback hooks, metric logging, and more. The trainer allows users to train models and resume
+    training processes from saved checkpoints, as well as evaluating performance through logging 
+    and plotting of metrics. Additionally, it supports inference and evaluation of the predicted data.
+    """
     
     def __init__(self, model:nn.Module, device) -> None:
         self.device = device
@@ -30,9 +38,9 @@ class TorchTrainer:
         self.last_model_path = None
         self.training = False
         
-    def compile(self, optimizer_fn:optim.Optimizer, loss_fn:nn.Module=None):
-        self.optimizer = optimizer_fn
-        self.criterion = loss_fn
+    def compile(self, optimizer:optim.Optimizer, criterion:nn.Module=None):
+        self.optimizer = optimizer
+        self.criterion = criterion
         
     def __save_model(self, checkpoint_dir:'str | Path', monitor_metric, mode, save_best=True, prefix=None):
         if not isinstance(checkpoint_dir, Path):
@@ -122,7 +130,7 @@ class TorchTrainer:
                   
     def step_average(self, new_value, previous_avg_value, updated_count):
         """ 
-        Computes standard average by default, this function can be overwriten
+        Computes standard average by default, this function can be overwritten
         to change this behaviour
         """
         return (previous_avg_value * (updated_count - 1) + new_value) / updated_count
@@ -252,11 +260,14 @@ class TorchTrainer:
         step_loss = self.criterion(outputs, labels)
         return outputs, step_loss
     
-    def predict(self, test_loader, callbacks:list=[]):
+    def predict(self, test_loader, callbacks:list=[TQDMProgressBar()]):
         """ Predict samples and return input data and predictions"""
         self.model.eval()
         self.num_predict_batches = len(test_loader)
-        if self.model.training: raise Exception("Model is in training mode")
+        assert not self.model.training, "Model is in training mode"
+        
+        for c in callbacks: c.on_predict_start(self, self.model)
+        
         with torch.no_grad():
             for c in callbacks: c.on_predict_epoch_start(self, self.model)
             for batch_idx, data in enumerate(test_loader):
@@ -275,6 +286,8 @@ class TorchTrainer:
             
             for c in callbacks: c.on_predict_epoch_end(self, self.model)
             self.__record_and_clear_step_logs()
+        
+        for c in callbacks: c.on_predict_end(self, self.model)
     
     def plot(self, metrics:list=['loss'], figsize=(15,5), style=False, ylim:tuple=(0,1)):
         if style: plt.style.use("ggplot")
@@ -295,3 +308,25 @@ class TorchTrainer:
             plt.subplot(1,len(metrics), i+1)
             plot_history_metric(m)
         plt.show()
+        
+
+class AMPTrainer(TorchTrainer):
+    """ TorchTrainer subclass that enables Automatic Mixed Precision (AMP) training. """
+    
+    def __init__(self, model, device, amp_dtype=torch.float16) -> None:
+        super().__init__(model, device)
+        self.scaler = torch.cuda.amp.GradScaler()
+        self.amp_dtype = amp_dtype
+    
+    def training_step(self, batch, batch_idx) -> tuple[torch.Tensor, torch.Tensor]:
+        inputs, labels = batch
+        with torch.autocast(device_type=inputs.device.type, dtype=self.amp_dtype):
+            outputs = self.model(inputs)
+            step_loss = self.criterion(outputs, labels)
+        return outputs, step_loss
+
+    def optimizer_step(self, loss, optimizer):
+        optimizer.zero_grad()
+        self.scaler.scale(loss).backward()
+        self.scaler.step(optimizer)
+        self.scaler.update()

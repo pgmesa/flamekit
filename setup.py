@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
     
 with open("requirements.txt", "r", encoding='utf-8') as fh:
     req = fh.readlines()
-    requirements = [line.replace("\n", "") for line in req]
+    requirements = [line.strip().replace("\n", "") for line in req]
 
 setuptools.setup(
     name='flamekit',

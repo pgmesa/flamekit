@@ -5,8 +5,9 @@ import torch.utils.data as data
 from typing import Iterator, Sequence
 
 
-class CustomRandomSampler(data.Sampler[int]):
-    r"""Samples elements randomly from a given list of indices, without replacement.
+class RandomSampler(data.Sampler[int]):
+    r"""Samples elements randomly from a given list of indices, without replacement and
+    stores the order of the indices in the `selected_indices_order` attribute.
 
     Args:
         indices (sequence): a sequence of indices
@@ -30,8 +31,9 @@ class CustomRandomSampler(data.Sampler[int]):
         return len(self.indices)
     
 
-class CustomSequentialSampler(data.Sampler[int]):
-    r"""Samples elements sequentially from a given list of indices, without replacement.
+class SequentialSampler(data.Sampler[int]):
+    r"""Samples elements sequentially from a given list of indices, without replacement and 
+    stores the order of the indices in the `selected_indices_order` attribute.
 
     Args:
         indices (sequence): a sequence of indices
@@ -52,6 +54,17 @@ class CustomSequentialSampler(data.Sampler[int]):
     
 
 def split_dataset(dataset:data.Dataset, val_split=0.2, test_split=0.1, shuffle=True, test_indices=None) -> tuple: 
+    """
+    Split a dataset into train, validation and test sets.
+    Args:
+        dataset (torch.utils.data.Dataset): Dataset to split.
+        val_split (float): Proportion of the training dataset to include in the validation split.
+        test_split (float): Proportion of the dataset to include in the test split.
+        shuffle (bool): Whether to shuffle the dataset before splitting.
+        test_indices (list): List of indices to include in the test split.
+    Returns:
+        tuple: A tuple containing the train, validation and test indices.        
+    """
     
     def get_split_indices(data_size, test_split, val_split, test_indices):
         # Creating data indices for training and validation splits:

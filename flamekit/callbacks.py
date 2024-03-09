@@ -3,6 +3,11 @@ import torch
 import torchmetrics
 
 class Callback:
+    """
+    Base callback class that implements all supported hooks called during training
+    
+    All custom callbacks should inherit from this class. 
+    """
     
     def __init__(self) -> None:
         pass
@@ -43,6 +48,9 @@ class Callback:
         pass
     
     
+    def on_predict_start(self, trainer, model):
+        pass
+    
     def on_predict_epoch_start(self, trainer, model):
         pass
     
@@ -55,7 +63,18 @@ class Callback:
     def on_predict_epoch_end(self, trainer, model):
         pass
 
+    def on_predict_end(self, trainer, model):
+        pass
+    
+
 class BaseEvaluator(Callback):
+    """ 
+    Base evaluator class. Implements basic functionality for storing the outputs, predictions and inputs
+    (if enabled) on each stage of the training and predict loops. It also logs automatically the computed
+    metrics on each step/epoch to the trainer
+    
+    It is recommended to inherit from this class and implement the calc_step_metrics and calc_epoch_metrics.
+    """
     
     def __init__(self, store_training_inputs=False, store_validation_inputs=False, store_predict_inputs=True) -> None:
         super().__init__()
@@ -69,7 +88,7 @@ class BaseEvaluator(Callback):
     def calc_epoch_metrics(self, trainer, model, outputs, labels, stage) -> list[tuple]:
         raise NotImplementedError
     
-    def register_variable(self, name:str, variable):
+    def __register_variable(self, name:str, variable):
         previous_val = getattr(self, name)
         if isinstance(variable, torch.Tensor):
             if previous_val is None:
@@ -89,9 +108,9 @@ class BaseEvaluator(Callback):
         
     def on_train_batch_end(self, trainer, model, outputs, batch, batch_idx):
         if self.store_training_inputs:
-            self.register_variable('epoch_training_inputs', batch[0])
-        self.register_variable('epoch_training_outputs', outputs)
-        self.register_variable('epoch_training_labels', batch[1])
+            self.__register_variable('epoch_training_inputs', batch[0])
+        self.__register_variable('epoch_training_outputs', outputs)
+        self.__register_variable('epoch_training_labels', batch[1])
         
         metrics = self.calc_step_metrics(trainer, model, outputs, batch[1], 'train', batch_idx)
         trainer.log(metrics)
@@ -107,9 +126,9 @@ class BaseEvaluator(Callback):
         
     def on_validation_batch_end(self, trainer, model, outputs, batch, batch_idx):
         if self.store_training_inputs:
-            self.register_variable('epoch_validation_inputs', batch[0])
-        self.register_variable('epoch_validation_outputs', outputs)
-        self.register_variable('epoch_validation_labels', batch[1])
+            self.__register_variable('epoch_validation_inputs', batch[0])
+        self.__register_variable('epoch_validation_outputs', outputs)
+        self.__register_variable('epoch_validation_labels', batch[1])
 
         metrics = self.calc_step_metrics(trainer, model, outputs, batch[1], 'val', batch_idx)
         metrics = [('val_'+m, v) for m, v in metrics]
@@ -127,9 +146,9 @@ class BaseEvaluator(Callback):
         
     def on_predict_batch_end(self, trainer, model, outputs, batch, batch_idx):
         if self.store_predict_inputs:
-            self.register_variable('epoch_predict_inputs', batch[0])
-        self.register_variable('epoch_predict_outputs', outputs)
-        self.register_variable('epoch_predict_labels', batch[1])
+            self.__register_variable('epoch_predict_inputs', batch[0])
+        self.__register_variable('epoch_predict_outputs', outputs)
+        self.__register_variable('epoch_predict_labels', batch[1])
         
         metrics = self.calc_step_metrics(trainer, model, outputs, batch[1], 'predict', batch_idx)
         trainer.log(metrics)
@@ -139,7 +158,13 @@ class BaseEvaluator(Callback):
         trainer.log(metrics)
     
     
-class TorchMetricsEvaluator(BaseEvaluator):  
+class TorchMetricsEvaluator(BaseEvaluator):
+    """ 
+    Class for evaluating the metrics of a model using torchmetrics and log the results to 
+    the trainer.
+    
+    Use the add_step_metrics and add_epoch_metric methods to add the metrics to evaluate.
+    """
     
     def __init__(self, store_training_inputs=False, store_validation_inputs=False, store_predict_inputs=True) -> None:
         super().__init__(store_training_inputs, store_validation_inputs, store_predict_inputs)

@@ -7,6 +7,12 @@ from tabulate import tabulate
 
 
 def print_cuda_available_devices(tabulate_fmt='pretty'):
+    """ 
+    Print available CUDA devices
+    
+    Args:
+        tabulate_fmt (str): Format for printing the table. Defaults to 'pretty'
+    """
     if torch.cuda.is_available():
         device_count = torch.cuda.device_count()
         device_info = []
@@ -19,7 +25,8 @@ def print_cuda_available_devices(tabulate_fmt='pretty'):
         print("No CUDA devices were found")
         
 
-def select_device(index=0, cuda=True):
+def select_device(index=0, cuda=True) -> torch.device:
+    """ Selects device """
     if torch.cuda.is_available() and cuda:
         device = torch.device(f"cuda:{index}")
     else:
@@ -27,7 +34,7 @@ def select_device(index=0, cuda=True):
     return device
 
 
-def to_device(data, device:'str | torch.DeviceObjType') -> 'Iterable | torch.Tensor':
+def to_device(data:'torch.Tensor | Iterable', device:'str | torch.DeviceObjType') -> 'Iterable | torch.Tensor':
     """ Recursively send to device """
     if isinstance(data, torch.Tensor):
         return data.to(device)
