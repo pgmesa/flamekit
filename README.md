@@ -114,8 +114,8 @@ history = trainer.fit(
 )
 ```
 ```
-Epoch 5/10: 100% |██████████████████████████████| 50/50 [00:01, loss=0.278, acc=0.887, precision=0.878, recall=0.887, auc=0.954, f1=0.888]
-Epoch 6/10:  92% |██████████████████████████    | 46/50 [00:01, loss=0.166, acc=0.934, precision=0.931, recall=0.931]
+Epoch 1/10: 100% |██████████████████████████████| 50/50 [00:01, loss=0.313, acc=0.869, precision=0.87, recall=0.884, auc=0.941, f1=0.87]
+Epoch 2/10:  72% |█████████████████████▌        | 36/50 [00:00, loss=0.212, acc=0.905, precision=0.906, recall=0.89] 
 ```
 
 ## Extending Trainer Functionality
@@ -165,10 +165,16 @@ history = trainer.fit(
 )
 ```
 ```
-Epoch 1/10: 100% |██████████████████████████████| 58/58 [00:27, loss=2.96, val_loss=1.77]
-Epoch 1/10: 100% |██████████████████████████████| 58/58 [00:27, loss=2.96, val_loss=1.77]
+Epoch 1/10: 100% |██████████████████████████████| 50/50 [00:00<00:00, 91.17 steps/s, loss=0.278]
+Epoch 2/10: 100% |██████████████████████████████| 50/50 [00:00<00:00, 72.83 steps/s, loss=0.166] 
+Epoch 3/10: 100% |██████████████████████████████| 50/50 [00:00<00:00, 96.45 steps/s, loss=0.0967]
 ```
-It also comes with a KerasProgressBar replica, which inherits from this class and tries to replicate Keras design:
+It also comes with a KerasProgressBar replica, which inherits from this class and tries to replicate the Keras design as much as possible:
 ```
-Epoch 1/10: 100% |██████████████████████████████| 58/58 [00:27, loss=2.96, val_loss=1.77]
+Epoch 1/10
+50/50 [==============================] - 00:00 77.64 steps/s, loss=0.303 
+Epoch 2/10
+50/50 [==============================] - 00:00 95.95 steps/s, loss=0.172
+Epoch 3/10
+50/50 [==============================] - 00:00 90.37 steps/s, loss=0.104 
 ```

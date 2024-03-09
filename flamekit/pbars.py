@@ -175,8 +175,11 @@ class TQDMProgressBar(ProgressBar):
                     if self.show_elapsed_time:
                         r_bar += ', '
                     r_bar += self.rate_str
-                r_bar += self.postfix_str + "]"
-            else:
+                
+                if self.show_postfix:
+                    r_bar += self.postfix_str
+                r_bar += "]"
+            elif self.show_postfix:
                 r_bar += self.postfix_str
                     
         pbar_format = l_bar + '{bar}' + r_bar
@@ -188,46 +191,37 @@ class KerasProgressBar(TQDMProgressBar):
     Tries to replicate Keras Progress bar design using TQDM.
     """
     
-    def __init__(self, pbar_size:int=30, ascii='.>=', desc_above=False,
-                 show_desc=True, show_elapsed_time=True, show_remaining_time=False, show_rate=False,
-                 show_postfix=True, show_n_fmt=True, show_total_fmt=True, show_percentage=True,
-                 pbar_frames=('[', ']'), l_bar=None, r_bar=None) -> None:
-        super().__init__(pbar_size, ascii, desc_above, show_desc, show_elapsed_time, show_remaining_time,
-                         show_rate, show_postfix, show_n_fmt, show_total_fmt, show_percentage, pbar_frames,
-                         l_bar, r_bar)
+    def __init__(self, pbar_size:int=30, ascii='.>=', desc_above=True, show_elapsed_time=True,
+                 show_rate=True, show_postfix=True, show_n_fmt=True, show_total_fmt=True,
+                 pbar_frames=('[', ']')) -> None:
+        super().__init__(pbar_size=pbar_size, ascii=ascii, desc_above=desc_above, show_desc=False,
+                         show_elapsed_time=show_elapsed_time, show_rate=show_rate, show_postfix=show_postfix,
+                         show_n_fmt=show_n_fmt, show_total_fmt=show_total_fmt, show_percentage=False, 
+                         pbar_frames=pbar_frames, l_bar=None, r_bar=None)
     
     def build_pbar_format(self) -> str:
         l_bar = self.l_bar
         if l_bar is None:
             l_bar = ''
-            if self.show_desc:
-                l_bar += '{desc}:'
-            if self.show_percentage:
-                l_bar += f' {self.percentage_str}%'
-            l_bar += ' ' + self.pbar_frames[0]
+            if self.show_n_fmt:
+                l_bar += f'{self.n_fmt_str}'
+                if self.show_total_fmt:
+                    l_bar += f'/{self.total_fmt_str}'
+                l_bar += ' '
+            l_bar += self.pbar_frames[0]
            
         r_bar = self.r_bar 
         if r_bar is None:
-            r_bar = self.pbar_frames[1]
-            if self.show_n_fmt:
-                r_bar += f' {self.n_fmt_str}'
-                if self.show_total_fmt:
-                    r_bar += f'/{self.total_fmt_str}'
+            r_bar = self.pbar_frames[1] + ' -'
             
-            if self.show_elapsed_time or self.show_rate:
-                r_bar += ' ['
-                if self.show_elapsed_time:
-                    r_bar += self.elapsed_time_str 
-                    if self.show_remaining_time:
-                        r_bar += f'<{self.remaining_time_str}'
-                
-                if self.show_rate:
-                    if self.show_elapsed_time:
-                        r_bar += ', '
-                    r_bar += self.rate_str
-                r_bar += self.postfix_str + "]"
-            else:
+            if self.show_elapsed_time:
+                r_bar += ' ' + self.elapsed_time_str
+            
+            if self.show_rate:
+                r_bar += ' ' + self.rate_str
+            
+            if self.show_postfix:    
                 r_bar += self.postfix_str
-                    
+            
         pbar_format = l_bar + '{bar}' + r_bar
         return pbar_format
