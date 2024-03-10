@@ -24,6 +24,7 @@ Here's a simple example demonstrating how to train a PyTorch model using FlameKi
 ```python
 from flamekit.training import TorchTrainer
 from flamekit.callbacks import Callback
+from flamekit.pbars import TQDMProgressBar
 from flamekit.utils import get_next_experiment_path, setup_reproducible_env
 
 setup_reproducible_env(seed=1337)
@@ -86,7 +87,7 @@ Epoch 3/10:  72% |████████████████████�
 
 ## Using Evaluator Callback
 
-Evaluator callbacks can be used to evaluate the model at each step or epoch and log the results to the trainer. You can create your own evaluators by inheriting from the BaseEvaluator class and implementing the `calc_step_metrics` and `calc_epoch_metrics` methods. Additionally, an in-built evaluator called `TorchMetricsEvaluator` is available, which accepts torchmetrics metrics. Here's how to use it:
+Evaluator callbacks can be used to evaluate the model at each step or epoch and log the results to the trainer. You can create your own evaluators by inheriting from the `BaseEvaluator` class and implementing the `calc_step_metrics` and `calc_epoch_metrics` methods. Additionally, an in-built evaluator called `TorchMetricsEvaluator` is available, which accepts torchmetrics metrics. Here's how to use it:
 
 ```python
 import torchmetrics
@@ -120,7 +121,7 @@ Epoch 2/10:  72% |████████████████████�
 
 ## Extending Trainer Functionality
 
-You can override the main trainer function to customize its behavior. For example, to create an Automatic Mixed Precision Trainer:
+You can override the main trainer function to customize its behavior. For example, to create an Automatic Mixed Precision (AMP) Trainer:
 
 ```python
 from flamekit.training import TorchTrainer
@@ -169,7 +170,7 @@ Epoch 1/10: 100% |████████████████████�
 Epoch 2/10: 100% |██████████████████████████████| 50/50 [00:00<00:00, 72.83 steps/s, loss=0.166] 
 Epoch 3/10: 100% |██████████████████████████████| 50/50 [00:00<00:00, 96.45 steps/s, loss=0.0967]
 ```
-It also comes with a KerasProgressBar replica, which inherits from this class and tries to replicate the Keras design as much as possible:
+It also implements a `KerasProgressBar` class, which inherits from `TQDMProgressBar` and tries to replicate the Keras design:
 ```python
 from flamekit.pbars import KerasProgressBar 
 
@@ -191,3 +192,5 @@ Epoch 2/10
 Epoch 3/10
 50/50 [==============================] - 00:00 90.37 steps/s, loss=0.104 
 ```
+
+Additionally, you can inspect `pbars.py` file to see how to create your own Progress Bar designs.
