@@ -9,7 +9,7 @@ with open("requirements.txt", "r", encoding='utf-8') as fh:
 
 setuptools.setup(
     name='flamekit',
-    version='0.1.0',
+    version='0.1.1',
     author="Pablo García Mesa",
     author_email="pgmesa.sm@gmail.com",
     description="Minimalistic toolkit for PyTorch",

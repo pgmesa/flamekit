@@ -53,11 +53,11 @@ class SequentialSampler(data.Sampler[int]):
         return len(self.indices)
     
 
-def split_dataset(dataset:data.Dataset, val_split=0.2, test_split=0.1, shuffle=True, test_indices=None) -> tuple: 
+def split_dataset(dataset_size:int, val_split=0.2, test_split=0.1, shuffle=True, test_indices=None) -> tuple: 
     """
     Split a dataset into train, validation and test sets.
     Args:
-        dataset (torch.utils.data.Dataset): Dataset to split.
+        dataset_size: Number of samples in the dataset.
         val_split (float): Proportion of the training dataset to include in the validation split.
         test_split (float): Proportion of the dataset to include in the test split.
         shuffle (bool): Whether to shuffle the dataset before splitting.
@@ -87,7 +87,7 @@ def split_dataset(dataset:data.Dataset, val_split=0.2, test_split=0.1, shuffle=T
         return train_indices, val_indices, test_indices
 
     train_indices, val_indices, test_indices = \
-        get_split_indices(len(dataset), test_split, val_split, test_indices)
+        get_split_indices(dataset_size, test_split, val_split, test_indices)
 
     # Creating PT data samplers and loaders:
     return train_indices, val_indices, test_indices

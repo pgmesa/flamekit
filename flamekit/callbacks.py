@@ -94,12 +94,16 @@ class BaseEvaluator(Callback):
             if previous_val is None:
                 setattr(self, name, variable)
             else:
-                setattr(self, name, torch.cat([previous_val, variable], dim=0))
+                concated = self.concat_tensor_variable(name, previous_val, variable)
+                setattr(self, name, concated)
         else:
             if previous_val is None:
                 setattr(self, name, [variable])
             else:
                 setattr(self, name, previous_val.append(variable))
+                
+    def concat_tensor_variable(self, name, previous_value, next_value):
+        return torch.cat([previous_value, next_value], dim=0)
         
     def on_train_epoch_start(self, trainer, model):
         self.epoch_training_inputs = None
@@ -177,7 +181,7 @@ class TorchMetricsEvaluator(BaseEvaluator):
         else:
             self.step_metrics.add_metrics(metrics)
     
-    def add_epoch_metric(self, metrics:dict[str, torchmetrics.Metric]):
+    def add_epoch_metrics(self, metrics:dict[str, torchmetrics.Metric]):
         if self.epoch_metrics is None:
             self.epoch_metrics = torchmetrics.MetricCollection(metrics)
         else:

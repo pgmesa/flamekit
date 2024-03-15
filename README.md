@@ -105,7 +105,7 @@ epoch_metrics = {
     'auc': torchmetrics.AUROC(task=task, num_classes=n_classes, average=average),
 }
 evaluator.add_step_metrics(step_metrics)
-evaluator.add_epoch_metric(epoch_metrics)
+evaluator.add_epoch_metrics(epoch_metrics)
 
 callbacks = [evaluator, pbar]
 
