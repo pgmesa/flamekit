@@ -5,7 +5,6 @@ from flamekit.devices import to_device
 from flamekit.callbacks import Callback
 from flamekit.pbars import TQDMProgressBar
 
-import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
