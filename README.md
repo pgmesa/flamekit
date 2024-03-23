@@ -1,5 +1,7 @@
 # FlameKit
 
+[![Downloads](https://static.pepy.tech/personalized-badge/flamekit?period=total&units=international_system&left_color=black&right_color=blue&left_text=Downloads)](https://pepy.tech/project/flamekit)
+
 FlameKit is a minimalistic toolkit for PyTorch, created to streamline the training process. It provides a Trainer class, Callbacks with predefined hooks, functionality for setting up a reproducible environment, evaluator callbacks, and a customizable progress bar. Its API is similar to PyTorch Lightning's, but it prioritizes minimal code, lightweightness, and ease of customization.
 
 - [Installation](#installation)
