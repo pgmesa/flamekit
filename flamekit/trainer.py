@@ -14,10 +14,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-MIN_MODE = 'min'
-MAX_MODE = 'max'
-TRAIN = 'train'; VAL = 'val'; PREDICT = 'predict'
-             
 class TorchTrainer:
     """ 
     Minimalistic class for performing training and evaluation over a PyTorch model. It is a 
@@ -32,6 +28,11 @@ class TorchTrainer:
     training processes from saved checkpoints, and evaluate performance through logging and
     plotting of metrics.
     """
+    MIN_MODE = 'min'
+    MAX_MODE = 'max'
+    TRAIN = 'train'
+    VAL = 'val'
+    PREDICT = 'predict'
     
     def __init__(self, model:nn.Module, device) -> None:
         self.device = device
@@ -65,7 +66,7 @@ class TorchTrainer:
         metric_epoch_array = self.history[monitor_metric]
         
         if save_best:
-            index = np.argmin(metric_epoch_array) if mode == MIN_MODE else np.argmax(metric_epoch_array) 
+            index = np.argmin(metric_epoch_array) if mode == self.MIN_MODE else np.argmax(metric_epoch_array) 
             if index != len(metric_epoch_array) - 1: return
             self.best_index = index
             if self.best_model_path is not None:
@@ -99,7 +100,7 @@ class TorchTrainer:
         }
         self.save_model(path_to_save, data_to_save)
         
-    def save_model(path_to_save, data_to_save:dict):
+    def save_model(self, path_to_save, data_to_save:dict):
         torch.save(data_to_save, path_to_save)
     
     def __save_results(self, dest_path):    
@@ -249,7 +250,7 @@ class TorchTrainer:
         elif loss.numel() > 1:
             raise ValueError("Loss must be scalar")
         
-        name = 'loss' if stage != VAL else 'val_loss'
+        name = 'loss' if stage != self.VAL else 'val_loss'
         self.log([(name, loss.item())])
         return loss
     
@@ -261,7 +262,7 @@ class TorchTrainer:
     def training_step(self, batch, batch_idx) -> tuple[torch.Tensor, torch.Tensor]:
         inputs, labels = batch
         outputs = self.model(inputs)
-        step_loss = self.loss_step(outputs, labels, TRAIN)
+        step_loss = self.loss_step(outputs, labels, self.TRAIN)
         return outputs, step_loss
     
     def __train(self, train_loader, callbacks:list[Callback]=None) -> tuple:
@@ -278,7 +279,7 @@ class TorchTrainer:
     def validation_step(self, batch, batch_idx):
         inputs, labels = batch
         outputs = self.model(inputs)
-        self.loss_step(outputs, labels, VAL)
+        self.loss_step(outputs, labels, self.VAL)
         return outputs
     
     def __validate(self, validation_loader, callbacks:list[Callback]=[]) -> tuple:
@@ -295,7 +296,7 @@ class TorchTrainer:
     def predict_step(self, batch, batch_idx):
         inputs, labels = batch
         outputs = self.model(inputs)
-        self.loss_step(outputs, labels, PREDICT)
+        self.loss_step(outputs, labels, self.PREDICT)
         return outputs
     
     def predict(self, test_loader, callbacks:list=[TQDMProgressBar()]):

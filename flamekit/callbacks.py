@@ -81,21 +81,33 @@ class BaseEvaluator(Callback):
     def __init__(self) -> None:
         super().__init__()
         
-    def calc_metrics(self, trainer, model, outputs, labels, stage, batch_idx) -> list[tuple]:
+    def calc_metrics(self, trainer, model, outputs, batch, batch_idx, stage) -> list[tuple]:
         raise NotImplementedError
+    
+    def reset_metrics(self, trainer, model, stage:str):
+        pass
         
     def on_train_batch_end(self, trainer, model, outputs, batch, batch_idx):
-        metrics = self.calc_metrics(trainer, model, outputs, batch[1], 'train', batch_idx)
+        metrics = self.calc_metrics(trainer, model, outputs, batch, batch_idx, trainer.TRAIN)
         trainer.log(metrics)
+    
+    def on_train_epoch_end(self, trainer, model):
+        self.reset_metrics(trainer, model, trainer.TRAIN)
         
     def on_validation_batch_end(self, trainer, model, outputs, batch, batch_idx):
-        metrics = self.calc_metrics(trainer, model, outputs, batch[1], 'val', batch_idx)
+        metrics = self.calc_metrics(trainer, model, outputs, batch, batch_idx, trainer.VAL)
         metrics = [('val_'+m, v) for m, v in metrics]
         trainer.log(metrics)
         
+    def on_validation_epoch_end(self, trainer, model):
+        self.reset_metrics(trainer, model, trainer.VAL)
+        
     def on_predict_batch_end(self, trainer, model, outputs, batch, batch_idx):
-        metrics = self.calc_metrics(trainer, model, outputs, batch[1], 'predict', batch_idx)
+        metrics = self.calc_metrics(trainer, model, outputs, batch, batch_idx, trainer.PREDICT)
         trainer.log(metrics)
+        
+    def on_predict_epoch_end(self, trainer, model):
+        self.reset_metrics(trainer, model, trainer.PREDICT)
     
     
 class TorchMetricsEvaluator(BaseEvaluator):
@@ -119,9 +131,13 @@ class TorchMetricsEvaluator(BaseEvaluator):
         else:
             self.step_metrics.add_metrics(metrics)
     
-    def calc_metrics(self, trainer, model, outputs, labels, stage, batch_idx) -> list[tuple]:
+    def calc_metrics(self, trainer, model, outputs, batch, batch_idx, stage) -> list[tuple]:
         if self.step_metrics is None: return []
         metric_collection = self.step_metrics.to(outputs.device)
+        labels = batch[1]
         metrics = metric_collection(outputs, labels)
         return [(m, v.item()) for m,v in metrics.items()]
-            
+    
+    def reset_metrics(self, trainer, model, stage:str):
+        if self.step_metrics is not None:
+            self.step_metrics.reset()
