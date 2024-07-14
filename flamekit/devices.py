@@ -1,9 +1,23 @@
 
 from collections.abc import Iterable
 
+from flamekit.utils import to_mib, to_mb
+
 import torch
-import torch.nn as nn
 from tabulate import tabulate
+
+
+def print_cuda_memory_stats(device=None, in_mib=True):
+    if in_mib: unit = "MiB"; converter = to_mib
+    else: unit = "MB"; converter = to_mb
+    alloc_mem = converter(torch.cuda.memory_allocated(device))
+    res_mem = converter(torch.cuda.memory_reserved(device))
+    max_alloc_mem = converter(torch.cuda.max_memory_allocated(device))
+    max_res_mem = converter(torch.cuda.max_memory_reserved(device))
+    print("Allocated Memory:     ", round(alloc_mem, ndigits=2), unit)
+    print("Reserved Memory:      ", round(res_mem, ndigits=2), unit)
+    print("Max Memory Allocated: ", round(max_alloc_mem, ndigits=2), unit)
+    print("Max Memory Reserved:  ", round(max_res_mem, ndigits=2), unit)
 
 
 def print_cuda_available_devices(tabulate_fmt='pretty'):
@@ -50,13 +64,4 @@ def to_device(data:'torch.Tensor | Iterable', device:'str | torch.DeviceObjType'
             element = to_device(element, device)
             elements.append(element)
         return elements
-    else:
-        raise ValueError(f"Some elements in data are not either Iterables or Tensors '{type(data)}'")
-    
-    
-class DataParallelWrapper(nn.DataParallel):
-    def __getattr__(self, name):
-        try:
-            return super().__getattr__(name)
-        except AttributeError:
-            return getattr(self.module, name)
+    raise ValueError(f"Some elements in data are not either Iterables or Tensors '{type(data)}'")

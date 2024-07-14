@@ -6,6 +6,24 @@ import torch
 import numpy as np
 
 
+def to_mb(num_bytes:float):
+    return num_bytes / (1000**2)  # Bytes to MB
+
+
+def to_mib(num_bytes:float):
+    return num_bytes / (1024**2)  # Bytes to MiB
+
+
+def tensor_memory_size(tensor):
+    # Get number of elements in the tensor
+    num_elements = tensor.numel()
+    # Get size of each element in bytes
+    element_size = tensor.element_size()
+    # Total memory in bytes
+    total_bytes = num_elements * element_size
+    return total_bytes
+
+
 def seed_all(seed:int):
     """ 
     Seeds every random process in the 'random', 'numpy', and 'torch' libraries
@@ -20,7 +38,7 @@ def seed_all(seed:int):
     torch.cuda.manual_seed_all(seed)
     
 
-def setup_reproducible_env(seed:int):
+def set_up_reproducible_env(seed:int):
     """ 
     Seeds every random process using the seed_all() method and disables dynamic algorithm selection.
 

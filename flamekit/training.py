@@ -1,9 +1,11 @@
 import os
 from pathlib import Path
+from datetime import datetime
 
 from flamekit.devices import to_device 
 from flamekit.callbacks import Callback
 from flamekit.pbars import TQDMProgressBar
+from flamekit.plotting import plot_curve_groups
 
 import torch
 import torch.nn as nn
@@ -14,15 +16,21 @@ import matplotlib.pyplot as plt
 
 MIN_MODE = 'min'
 MAX_MODE = 'max'
+TRAIN = 'train'; VAL = 'val'; PREDICT = 'predict'
              
 class TorchTrainer:
     """ 
-    Class for performing training and evaluation over a PyTorch model.
-    
+    Minimalistic class for performing training and evaluation over a PyTorch model. It is a 
+    helper class designed to eliminate boilerplate code needed for looping over the dataset,
+    logging metrics, and plotting results. Each critical part of the training and evaluation
+    phases is implemented in a different compartmentalized function, which can be overridden
+    to cater to specific use cases. It is intended to be lightweight, fast, and highly
+    customizable.
+
     This class facilitates various aspects of the training process, including checkpoint saving,
-    callback hooks, metric logging, and more. The trainer allows users to train models and resume
-    training processes from saved checkpoints, as well as evaluating performance through logging 
-    and plotting of metrics. Additionally, it supports inference and evaluation of the predicted data.
+    callback hooks, metric logging, and more. The trainer allows users to train models, resume
+    training processes from saved checkpoints, and evaluate performance through logging and
+    plotting of metrics.
     """
     
     def __init__(self, model:nn.Module, device) -> None:
@@ -36,26 +44,37 @@ class TorchTrainer:
         self.best_model_path = None
         self.last_model_path = None
         self.training = False
+        self.results_ncols = 3
+        self.results_path = None
+        self.train_color = '#1f77b4' # Blue
+        self.val_color = '#ff7f0e'   # Orange
         
     def compile(self, optimizer:optim.Optimizer, criterion:nn.Module=None):
         self.optimizer = optimizer
         self.criterion = criterion
+        
+    def is_compiled(self):
+        return hasattr(self, 'optimizer') and self.optimizer is not None
         
     def __save_model(self, checkpoint_dir:'str | Path', monitor_metric, mode, save_best=True, prefix=None):
         if not isinstance(checkpoint_dir, Path):
             checkpoint_dir = Path(checkpoint_dir)
         checkpoint_dir.mkdir(exist_ok=True)
         
+        prefix = prefix or 'ckp'
         metric_epoch_array = self.history[monitor_metric]
         
         if save_best:
             index = np.argmin(metric_epoch_array) if mode == MIN_MODE else np.argmax(metric_epoch_array) 
             if index != len(metric_epoch_array) - 1: return
             self.best_index = index
-            for checkpoint_file in checkpoint_dir.glob(f'{prefix}*'):
-                os.remove(checkpoint_file)
-        else: index = -1
-        
+            if self.best_model_path is not None:
+                os.remove(self.best_model_path)
+        else: 
+            index = -1
+            if self.last_model_path is not None:
+                os.remove(self.last_model_path)
+                
         epoch = self.current_epoch + 1
         assert epoch == len(metric_epoch_array)
         metric = round(metric_epoch_array[index], ndigits=4)
@@ -63,20 +82,34 @@ class TorchTrainer:
         suffix = 'best' if save_best else 'last'
         name = f'{prefix}_{monitor_metric.replace("_", "-")}_{metric}_{epoch}_{suffix}.tar'
         path_to_save = checkpoint_dir/name
-        self.last_model_path = path_to_save
-        msg = f"[INFO] Saving last checkpoint of the training to '{path_to_save}'"
         if save_best: 
             self.best_model_path = path_to_save
             msg = f"[INFO] Saving best checkpoint, regarding '{monitor_metric}' metric -- mode='{mode}' ({path_to_save})"
-        print(msg)
-        torch.save({
+            print(msg)
+        else:
+            self.last_model_path = path_to_save
+        
+        data_to_save = {
             'epoch': epoch,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'history': self.history,
-            'monitor': monitor_metric
-        }, path_to_save)
+            'monitor': monitor_metric,
+            'date': datetime.now().isoformat()
+        }
+        self.save_model(path_to_save, data_to_save)
         
+    def save_model(path_to_save, data_to_save:dict):
+        torch.save(data_to_save, path_to_save)
+    
+    def __save_results(self, dest_path):    
+        epoch = self.current_epoch
+        keys, vals = list(self.history.keys()), [v[epoch] for v in self.history.values()]
+        n = len(self.history) + 1  # number of cols
+        s = "" if dest_path.exists() else (("%15s," * n % tuple(["epoch"] + keys)).rstrip(",") + "\n")  # header
+        with open(dest_path, "a") as f:
+            f.write(s + ("%15.5g," * n % tuple([epoch + 1] + vals)).rstrip(",") + "\n")
+      
     def load(self, model_path:Path):
         self.checkpoint = torch.load(model_path)
         self.model.load_state_dict(self.checkpoint['model_state_dict'])
@@ -84,15 +117,16 @@ class TorchTrainer:
         self.history = self.checkpoint['history']
         self.current_epoch = self.checkpoint['epoch']
         assert len(self.history['loss']) == self.current_epoch
-        if self.best_model_path is None: 
-            self.best_model_path = model_path
-            self.last_model_path = model_path
         print(f"[OK] Checkpoint '{model_path}' has been loaded successfully")
         
     def load_best(self):
+        if self.best_model_path is None:
+            raise RuntimeError("No best model has been saved, fit() method has not been called")
         self.load(self.best_model_path) 
         
     def load_last(self):
+        if self.last_model_path is None:
+            raise RuntimeError("No last model has been saved, fit() method has not been called")
         self.load(self.last_model_path)
     
     def __record_in_history(self, metrics:list[tuple]):
@@ -116,13 +150,13 @@ class TorchTrainer:
             elif len(v) < self.current_epoch:
                 raise RuntimeError("Sanity Check: Current epoch and history dictionary are not synchronized")   
     
-    def log(self, metrics:list[tuple]):
+    def log(self, metrics:list[tuple], average=True):
         """ Logs values into a dictionary that is averaged on each step """
         for (k, v) in metrics:
             if self.step_logs.get(k, False):
                 updated_count = self.step_logs[k][1] + 1
                 previous_avg_value = self.step_logs[k][0]
-                updated_avg = self.step_average(v, previous_avg_value, updated_count)
+                updated_avg = v if not average else self.step_average(v, previous_avg_value, updated_count)
                 self.step_logs[k] = (updated_avg, updated_count)
             else:
                 self.step_logs[k] = (v, 1)
@@ -138,7 +172,7 @@ class TorchTrainer:
         if self.training:
             self.__record_in_history(self.get_step_metrics())
             self.__history_sanity_check()
-        self.step_logs = {}       
+        self.step_logs = {}
         
     def get_step_metrics(self) -> list[tuple]:
         """ Get current step metrics """
@@ -147,11 +181,14 @@ class TorchTrainer:
     
     def fit(self, train_loader, epochs, validation_loader=None, dest_path:'str | Path'=None, prefix=None,
                 save_best=True, monitor='val_loss', mode='min', callbacks:list[Callback]=[TQDMProgressBar()]):
+        if not self.is_compiled():
+            raise RuntimeError("You have to compile the trainer before calling 'fit'")
         self.training = True
         self.terminate = False
         self.num_training_batches = len(train_loader)
-        if monitor == 'val_loss':
-            self.monitor = 'val_loss' if validation_loader is not None else 'loss'
+        self.monitor = monitor
+        if 'val_' in monitor:
+            self.monitor = monitor if validation_loader is not None else monitor.replace('val_', '')
         
         self.max_epochs = self.current_epoch + epochs
         
@@ -171,45 +208,61 @@ class TorchTrainer:
             for c in callbacks: c.on_fit_epoch_end(self, self.model)
             
             if dest_path is not None:
-                save_best = save_best and (ei < epochs -1)
-                self.__save_model(dest_path, self.monitor, mode, save_best=save_best, prefix=prefix)
-            
+                if not isinstance(dest_path, Path):
+                    dest_path = Path(dest_path)
+                if save_best:
+                    self.__save_model(dest_path, self.monitor, mode, save_best=True, prefix=prefix)
+                self.__save_model(dest_path, self.monitor, mode, save_best=False, prefix=prefix)
+                self.__save_results(dest_path/'results.csv')
             self.current_epoch += 1
             if self.terminate: break
         
         self.training = False
         for c in callbacks: c.on_fit_end(self, self.model)
+        if dest_path is not None: 
+            fig, _ = self.__plot_results(dest_path/'results.png')
+            plt.close(fig)
+        print("[END] Training finished")
     
         return self.history
     
-    def __process_batch_loss(self, loss:'torch.Tensor | list[tuple] | tuple[tuple]', prefix=None) -> tuple:
-        prefix = '' if prefix is None else prefix+"_"
-        if isinstance(loss, tuple) or isinstance(loss, list):
-            loss_dict_ = dict(loss) 
-            loss_names_ = [prefix+l for l in loss_dict_.keys()]
-            losses_ = torch.stack(list(loss_dict_.values()), dim=0)
-            total_loss = torch.sum(losses_, dim=0)
-            loss_names = [prefix+'loss'] + loss_names_
-            loss_items = [total_loss.item()] + [l.item() for l in losses_]
-        elif isinstance(loss, torch.Tensor):
-            total_loss = loss
-            loss_names = [prefix+'loss']
-            loss_items = [loss.item()]
-        else:
-            raise RuntimeError(f"Criterion output type '{type(loss)}' not supported")
+    def loss_step(self, outputs, labels, stage:str=TRAIN) -> torch.Tensor:
+        """ 
+        Computes the loss for a given set of model predictions and labels and processes the criterion output,
+        which can be either a tensor or a scalar and logs the result. 
+        
+        This function can be overwritten to change the default behaviour of how the loss is computed and logged
+        in each stage.
+        
+        Returns:
+            torch.Tensor: The computed loss value on which .backward() will be called
+        """
+        if self.criterion is None:
+            raise RuntimeError("You have to provide a loss function in trainer.compile() " + 
+                               "or override trainer.loss_step() method")
+       
+        loss = self.criterion(outputs, labels)
 
-        return total_loss, loss_names, loss_items
-    
-    def training_step(self, batch, batch_idx) -> tuple[torch.Tensor, torch.Tensor]:
-        inputs, labels = batch
-        outputs = self.model(inputs)
-        step_loss = self.criterion(outputs, labels)
-        return outputs, step_loss
+        if not isinstance(loss, torch.Tensor):
+            raise ValueError(f"Criterion output type '{type(loss)}' not supported, " + 
+                             "override trainer.loss_step() to make it compatible with your implementation")
+        elif loss.numel() > 1:
+            raise ValueError("Loss must be scalar")
+        
+        name = 'loss' if stage != VAL else 'val_loss'
+        self.log([(name, loss.item())])
+        return loss
     
     def optimizer_step(self, loss, optimizer):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+    
+    def training_step(self, batch, batch_idx) -> tuple[torch.Tensor, torch.Tensor]:
+        inputs, labels = batch
+        outputs = self.model(inputs)
+        step_loss = self.loss_step(outputs, labels, TRAIN)
+        return outputs, step_loss
     
     def __train(self, train_loader, callbacks:list[Callback]=None) -> tuple:
         """ Train model for one epoch """
@@ -217,23 +270,16 @@ class TorchTrainer:
         for batch_idx, data in enumerate(train_loader):
             inputs, labels = to_device(data, self.device)
             batch = (inputs, labels)
-
             for c in callbacks: c.on_train_batch_start(self, self.model, batch, batch_idx)
-            
             outputs, step_loss = self.training_step(batch, batch_idx)
-            step_loss, loss_names, loss_items = self.__process_batch_loss(step_loss)
             self.optimizer_step(step_loss, self.optimizer)
-            
-            step_metrics = list(zip(loss_names, loss_items))
-            self.log(step_metrics)
-            
             for c in callbacks: c.on_train_batch_end(self, self.model, outputs, batch, batch_idx)
     
     def validation_step(self, batch, batch_idx):
         inputs, labels = batch
         outputs = self.model(inputs)
-        step_loss = self.criterion(outputs, labels)
-        return outputs, step_loss
+        self.loss_step(outputs, labels, VAL)
+        return outputs
     
     def __validate(self, validation_loader, callbacks:list[Callback]=[]) -> tuple:
         """ Validate model with validation data """
@@ -242,25 +288,17 @@ class TorchTrainer:
             for batch_idx, data in enumerate(validation_loader):
                 inputs, labels = to_device(data, self.device)
                 batch = (inputs, labels)
-                
                 for c in callbacks: c.on_validation_batch_start(self, self.model, batch, batch_idx)
-                
-                outputs, step_loss = self.validation_step(batch, batch_idx)
-                step_loss, loss_names, loss_items = self.__process_batch_loss(step_loss, 'val')
-                
-                step_metrics = list(zip(loss_names, loss_items))
-                self.log(step_metrics)
-                
+                outputs = self.validation_step(batch, batch_idx)
                 for c in callbacks: c.on_validation_batch_end(self, self.model, outputs, batch, batch_idx) 
     
     def predict_step(self, batch, batch_idx):
         inputs, labels = batch
         outputs = self.model(inputs)
-        step_loss = self.criterion(outputs, labels)
-        return outputs, step_loss
+        self.loss_step(outputs, labels, PREDICT)
+        return outputs
     
     def predict(self, test_loader, callbacks:list=[TQDMProgressBar()]):
-        """ Predict samples and return input data and predictions"""
         self.model.eval()
         self.num_predict_batches = len(test_loader)
         assert not self.model.training, "Model is in training mode"
@@ -272,15 +310,8 @@ class TorchTrainer:
             for batch_idx, data in enumerate(test_loader):
                 inputs, labels = to_device(data, self.device)
                 batch = (inputs, labels)
-
                 for c in callbacks: c.on_predict_batch_start(self, self.model, batch, batch_idx)
-                
-                outputs, step_loss = self.predict_step(batch, batch_idx)
-                step_loss, loss_names, loss_items = self.__process_batch_loss(step_loss)
-                
-                step_metrics = list(zip(loss_names, loss_items))
-                self.log(step_metrics)
-                
+                outputs = self.predict_step(batch, batch_idx)
                 for c in callbacks: c.on_predict_batch_end(self, self.model, outputs, batch, batch_idx)
             
             for c in callbacks: c.on_predict_epoch_end(self, self.model)
@@ -288,44 +319,71 @@ class TorchTrainer:
         
         for c in callbacks: c.on_predict_end(self, self.model)
     
-    def plot(self, metrics:list=['loss'], figsize=(15,5), style=False, ylim:tuple=(0,1)):
-        if style: plt.style.use("ggplot")
+    def plot(self, metrics:list=None, add_label_text=False, dest_path=None, colors:list=None):
+        """ 
+        Plots metrics from history and optionally saves the plot to a file.
         
-        plt.figure(figsize=figsize)
-        def plot_history_metric(metric):
-            plt.plot(self.history[f"{metric}"])
-            val_metric = f"val_{metric}"
-            if val_metric in self.history: plt.plot(self.history[val_metric])
-            plt.title('Train History')
-            plt.ylabel(metric)
-            plt.xlabel('Epoch')
-            if ylim is not None:
-                plt.ylim(ylim)
-            plt.legend(['train', 'validation'], loc='upper left')
-        
-        for i, m in enumerate(metrics):
-            plt.subplot(1,len(metrics), i+1)
-            plot_history_metric(m)
+        Args:
+            metrics (list, optional): List of metric names to plot. If not provided, all available 
+                metrics will be plotted.
+            add_label_text (bool, optional): Whether to add label text to the plot instead of using 
+                the legend. Defaults to False.
+            dest_path (str or Path, optional): Path to save the plot. If not provided, the plot will 
+                only be displayed.
+            colors (list, optional): List of colors to use for plotting. If not provided, default 
+                matplotlib colors will be used. Can be a list of lists, containing the colors for each
+                metric group or a single list with same colors to use for all metrics.
+        """
+        if not metrics:
+            keys = self.history.keys()
+        else:
+            keys = []
+            for k in metrics:
+                if k not in self.history:
+                    if 'val_'+k not in self.history:
+                        raise ValueError(f"Metric '{k}' not found in history")
+                elif k not in keys: 
+                    keys.append(k)
+                if 'val_' not in k and 'val_'+k in self.history and 'val_'+k not in keys:
+                    keys.append('val_'+k)
+        self.__plot_results(dest_path, keys=keys, colors=colors, add_label_text=add_label_text)
+        plt.tight_layout()
         plt.show()
         
-
-class AMPTrainer(TorchTrainer):
-    """ TorchTrainer subclass that enables Automatic Mixed Precision (AMP) training. """
-    
-    def __init__(self, model, device, amp_dtype=torch.float16) -> None:
-        super().__init__(model, device)
-        self.scaler = torch.cuda.amp.GradScaler()
-        self.amp_dtype = amp_dtype
-    
-    def training_step(self, batch, batch_idx) -> tuple[torch.Tensor, torch.Tensor]:
-        inputs, labels = batch
-        with torch.autocast(device_type=inputs.device.type, dtype=self.amp_dtype):
-            outputs = self.model(inputs)
-            step_loss = self.criterion(outputs, labels)
-        return outputs, step_loss
-
-    def optimizer_step(self, loss, optimizer):
-        optimizer.zero_grad()
-        self.scaler.scale(loss).backward()
-        self.scaler.step(optimizer)
-        self.scaler.update()
+    def __plot_results(self, dest_path=None, keys:list=None, colors=None, add_label_text=False):
+        # Create groups of metrics (plot training and val metrics together)
+        groups = []
+        dic = self.history
+        if keys is not None:
+            dic = {k:v for (k, v) in dic.items() if k in keys}
+        metrics = {k:v for (k, v) in dic.items() if not k.startswith('val_')}
+        val_metrics = {k:v for (k, v) in dic.items() if k.startswith('val_')}
+        for (k, v) in metrics.items():
+            val_name = 'val_'+k
+            if val_name in val_metrics:
+                val_v = val_metrics.pop(val_name)
+                groups.append({k:v, val_name:val_v})
+            else:
+                groups.append({k:v})
+        for (k, v) in val_metrics.items(): # Remaining val metrics
+            groups.append({k:v})
+        # Define curve colors
+        if colors is None:
+            colors = []
+            for group in groups:
+                group_colors = []
+                for k in group.keys():
+                    group_colors.append(self.val_color if 'val_' in k else self.train_color)
+                colors.append(group_colors)
+        # Plot curve groups
+        def customize_axis(idx:int, ax:plt.Axes, x, group:dict, colors):
+            title = list(group.keys())[0].replace('val_', '').replace('_', ' ').capitalize()
+            ax.set_title(title)
+            ax.set_xlabel('Epoch')
+            ax.set_ylabel('Value')
+            ax.set_xticks(x)
+            
+        x = range(1, self.current_epoch+1)
+        fig, axes = plot_curve_groups(x, groups, ncols=self.results_ncols, colors=colors,
+                          add_label_text=add_label_text, dest_path=dest_path, callback=customize_axis)
+        return fig, axes

@@ -27,38 +27,37 @@ Here's a simple example demonstrating how to train a PyTorch model using FlameKi
 from flamekit.training import TorchTrainer
 from flamekit.callbacks import Callback
 from flamekit.pbars import TQDMProgressBar
-from flamekit.utils import get_next_experiment_path, setup_reproducible_env
+from flamekit.utils import get_next_experiment_path, set_up_reproducible_env
 
-setup_reproducible_env(seed=1337)
+set_up_reproducible_env(seed=1337)
 
-# Define your custom callbacks
+total_it = len(train_loader) * epochs
+
+def get_lr(it):
+    if lr_decay is None:
+        return lr0
+    # Linear decay
+    elif lr_decay == "linear":
+        return max(lrf, lr0 - it * (lr0 - lrf) / total_it)
+    # Cosine decay
+    elif lr_decay == "cosine":
+        return lrf + (lr0 - lrf) * (1 + math.cos(math.pi * it / total_it)) / 2
+    else:
+        raise ValueError(f"Unsupported lr_decay: {lr_decay}")
+
 class TrainingStrategy(Callback):
     
-    def __init__(self) -> None:
-        self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=20, min_lr=min_lr)
-    
-    def update_lr(self, monitored_metric_value):
-        current_lr = trainer.optimizer.param_groups[0]["lr"]
-        self.lr_scheduler.step(monitored_metric_value)
-        new_lr = trainer.optimizer.param_groups[0]["lr"]
-        if new_lr != current_lr:
-            print(f"[LR] Learning rate has changed from {current_lr} to {new_lr}")
-    
-    def on_train_epoch_start(self, trainer, model):
-        dataset.enable_augment()
-
-    def on_validation_epoch_start(self, trainer, model):
-        dataset.disable_augment()
-            
-    def on_fit_epoch_end(self, trainer, model):
-        monitored_metric_value = trainer.history[trainer.monitor][-1]
-        self.update_lr(monitored_metric_value)
-            
-    def on_predict_epoch_start(self, trainer, model):
-        dataset.disable_augment()
+    def on_train_batch_start(self, trainer, model, batch, batch_idx):
+        # Update Lr
+        it = (trainer.current_epoch) * len(train_loader) + batch_idx
+        new_lr = get_lr(it)
+        for param_group in trainer.optimizer.param_groups:
+            param_group["lr"] = new_lr
+        # Monitor lr
+        trainer.log([('lr', new_lr)], average=False)
 
 trainer = TorchTrainer(model, device)
-optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+optimizer = torch.optim.AdamW(model.parameters(), lr=lr0)
 criterion = torch.nn.CrossEntropyLoss()
 
 trainer.compile(optimizer, criterion=criterion)
@@ -94,20 +93,22 @@ Evaluator callbacks can be used to evaluate the model at each step or epoch and 
 ```python
 import torchmetrics
 from flamekit.callbacks import TorchMetricsEvaluator
-
+    
 evaluator = TorchMetricsEvaluator()
 
-step_metrics = {
-    'acc': torchmetrics.Accuracy(task=task, num_classes=n_classes, average=average),
+class Accuracy(torchmetrics.Accuracy):
+    def update(self, preds, target):
+        preds = preds.argmax(dim=1)
+        super().update(preds, target)
+
+metrics = {
+    'acc': Accuracy(task=task, num_classes=n_classes, average=average),
     'precision': torchmetrics.Precision(task=task, num_classes=n_classes, average=average),
     'recall': torchmetrics.Recall(task=task, num_classes=n_classes, average=average),
-}
-epoch_metrics = {
     'f1': torchmetrics.F1Score(task=task, num_classes=n_classes, average=average),
     'auc': torchmetrics.AUROC(task=task, num_classes=n_classes, average=average),
 }
-evaluator.add_step_metrics(step_metrics)
-evaluator.add_epoch_metrics(epoch_metrics)
+evaluator.add_metrics(metrics)
 
 callbacks = [evaluator, pbar]
 
@@ -130,23 +131,28 @@ from flamekit.training import TorchTrainer
 
 class AMPTrainer(TorchTrainer):
     
-    def __init__(self, model, device, amp_dtype=torch.float16) -> None:
+    def __init__(self, model, device, amp_dtype=torch.float16, scale=True) -> None:
         super().__init__(model, device)
         self.scaler = torch.cuda.amp.GradScaler()
         self.amp_dtype = amp_dtype
+        self.scale = scale
     
     def training_step(self, batch, batch_idx) -> tuple[torch.Tensor, torch.Tensor]:
         inputs, labels = batch
         with torch.autocast(device_type=inputs.device.type, dtype=self.amp_dtype):
             outputs = self.model(inputs)
-            step_loss = self.criterion(outputs, labels)
+            step_loss = self.loss_step(outputs, labels)
         return outputs, step_loss
 
     def optimizer_step(self, loss, optimizer):
         optimizer.zero_grad()
-        self.scaler.scale(loss).backward()
-        self.scaler.step(optimizer)
-        self.scaler.update()
+        if self.scale:
+            self.scaler.scale(loss).backward()
+            self.scaler.step(optimizer)
+            self.scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
 ```
 
 ## Customizable Progress Bars

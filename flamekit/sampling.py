@@ -89,5 +89,4 @@ def split_dataset(dataset_size:int, val_split=0.2, test_split=0.1, shuffle=True,
     train_indices, val_indices, test_indices = \
         get_split_indices(dataset_size, test_split, val_split, test_indices)
 
-    # Creating PT data samplers and loaders:
     return train_indices, val_indices, test_indices
