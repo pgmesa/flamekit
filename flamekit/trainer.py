@@ -49,6 +49,7 @@ class TorchTrainer:
         self.results_path = None
         self.train_color = '#1f77b4' # Blue
         self.val_color = '#ff7f0e'   # Orange
+        self.extension = 'pt'
         
     def compile(self, optimizer:optim.Optimizer, criterion:nn.Module=None):
         self.optimizer = optimizer
@@ -81,7 +82,7 @@ class TorchTrainer:
         metric = round(metric_epoch_array[index], ndigits=4)
         
         suffix = 'best' if save_best else 'last'
-        name = f'{prefix}_{monitor_metric.replace("_", "-")}_{metric}_{epoch}_{suffix}.tar'
+        name = f'{prefix}_{monitor_metric.replace("_", "-")}_{metric}_{epoch}_{suffix}.{self.extension}'
         path_to_save = checkpoint_dir/name
         if save_best: 
             self.best_model_path = path_to_save

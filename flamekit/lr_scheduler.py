@@ -16,6 +16,8 @@ class CosineDecay:
         coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # Starts at 1 and goes to 0
         return coeff # Always in the range [0, 1]
     
+    def __repr__(self) -> str:
+        return f"CosineDecay(k={self.k})"
     
 class LinearDecay:
     """
@@ -27,6 +29,8 @@ class LinearDecay:
         coeff = 1 - decay_ratio # Starts at 1 and goes to 0
         return coeff # Always in the range [0, 1]
 
+    def __repr__(self) -> str:
+        return "LinearDecay"
 
 class LRScheduler:
     """
@@ -55,14 +59,19 @@ class LRScheduler:
     def step(self) -> float:
         # Linear warmup
         if self.nit < self.warmup_it:
-            return self.lr0 * ((self.nit + 1) / self.warmup_it)
+            new_lr = self.lr0 * ((self.nit + 1) / self.warmup_it)
         # Cooldown period if nit > total_it
         elif self.nit > self.total_it:
-            return self.lrf
+            new_lr = self.lrf
         # Lr decay
-        decay_step = self.nit - self.warmup_it
-        decay_steps = self.total_it - self.warmup_it
-        coeff = self.decay_fn(decay_step, decay_steps)
-        new_lr = self.lrf + coeff * (self.lr0 - self.lrf)
+        else:
+            decay_step = self.nit - self.warmup_it
+            decay_steps = self.total_it - self.warmup_it
+            coeff = self.decay_fn(decay_step, decay_steps)
+            new_lr = self.lrf + coeff * (self.lr0 - self.lrf)
         self.nit += 1
         return new_lr
+    
+    def __repr__(self) -> str:
+        return (f"LRScheduler(lr0={self.lr0}, lrf={self.lrf}, total_it={self.total_it}, " +
+                    f"warmup_it={self.warmup_it}, decay_fn={self.decay_fn})")

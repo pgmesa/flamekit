@@ -2,11 +2,16 @@
 
 [![Downloads](https://static.pepy.tech/personalized-badge/flamekit?period=total&units=international_system&left_color=black&right_color=blue&left_text=Downloads)](https://pepy.tech/project/flamekit)
 
-FlameKit is a minimalistic toolkit for PyTorch, created to streamline the training process. It provides a Trainer class, Callbacks with predefined hooks, functionality for setting up a reproducible environment, evaluator callbacks, and a customizable progress bar. Its API is similar to PyTorch Lightning's, but it prioritizes minimal code, lightweightness, and ease of customization.
+FlameKit is a minimalistic toolkit for PyTorch, created to streamline the training and evaluation process. It is designed to eliminate the boilerplate code needed for looping over datasets, logging metrics, and plotting results. Each critical part of the training and evaluation phases is implemented in a different compartmentalized function, which can be overridden to cater to specific use cases. It is intended to be lightweight, fast, and highly customizable.
+
+FlameKit provides a trainer class, callbacks with predefined hooks, functionality for setting up a reproducible environment, customizable progress bars, learning rate schedulers, and more. Its API is similar to PyTorch Lightning's, but it prioritizes minimal code and lightweight design.
+
+Check the `/examples` directory for more detailed information on how to use this package.
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Using Evaluator Callback](#using-evaluator-callback)
+- [Metrics Logging and Plots](#metrics-logging-and-plots)
 - [Extending Trainer Functionality](#extending-trainer-functionality)
 - [Customizable Progress Bars](#customizable-progress-bars)
 
@@ -24,33 +29,33 @@ pip install flamekit
 Here's a simple example demonstrating how to train a PyTorch model using FlameKit alongside custom callbacks. For more detailed examples explore the `/examples` directory:
 
 ```python
-from flamekit.training import TorchTrainer
+from flamekit.trainer import TorchTrainer
 from flamekit.callbacks import Callback
 from flamekit.pbars import TQDMProgressBar
 from flamekit.utils import get_next_experiment_path, set_up_reproducible_env
+from flamekit.lr_scheduler import LRScheduler, CosineDecay, LinearDecay
 
 set_up_reproducible_env(seed=1337)
 
-total_it = len(train_loader) * epochs
-
-def get_lr(it):
-    if lr_decay is None:
-        return lr0
-    # Linear decay
-    elif lr_decay == "linear":
-        return max(lrf, lr0 - it * (lr0 - lrf) / total_it)
-    # Cosine decay
-    elif lr_decay == "cosine":
-        return lrf + (lr0 - lrf) * (1 + math.cos(math.pi * it / total_it)) / 2
-    else:
-        raise ValueError(f"Unsupported lr_decay: {lr_decay}")
-
+total_it = epochs * len(train_loader)
+warmup_it = warmup_epochs * len(train_loader)      # Warmup iterations
+cooldown_it = cooldown_epochs * len(train_loader)  # Cooldown iterations
+lr_decay_it = total_it - cooldown_it
+lr_decay_fn = CosineDecay(k=2)
+    
 class TrainingStrategy(Callback):
     
+    def __init__(self) -> None:
+        self.lr_scheduler = LRScheduler(
+            lr0, lrf, lr_decay_it, warmup_it=warmup_it, decay_fn=lr_decay_fn
+        )
+        
+    def on_fit_start(self, trainer, model):
+        self.lr_scheduler.reset()
+    
     def on_train_batch_start(self, trainer, model, batch, batch_idx):
-        # Update Lr
-        it = (trainer.current_epoch) * len(train_loader) + batch_idx
-        new_lr = get_lr(it)
+        # Update lr
+        new_lr = self.lr_scheduler.step()
         for param_group in trainer.optimizer.param_groups:
             param_group["lr"] = new_lr
         # Monitor lr
@@ -79,16 +84,16 @@ history = trainer.fit(
 )
 ```
 ```
-Epoch 1/10: 100% |██████████████████████████████| 58/58 [00:30, loss=1.96, val_loss=1.77]
-[INFO] Saving best checkpoint, regarding 'val_loss' metric -- mode='min' (checkpoints\experiment_2\YoloV2_val-loss_1.7744_1_best.tar)
-Epoch 2/10: 100% |██████████████████████████████| 58/58 [00:29, loss=1.72, val_loss=1.79]
-Epoch 3/10:  72% |█████████████████████▋        | 42/58 [00:22, loss=1.68]
+Epoch 1/10: 100% |██████████████████████████████| 58/58 [00:30, lr=0.001, loss=1.96, val_loss=1.77]
+[INFO] Saving best checkpoint, regarding 'val_loss' metric -- mode='min' (checkpoints\experiment_2\ckp_val-loss_1.7744_1_best.pt)
+Epoch 2/10: 100% |██████████████████████████████| 58/58 [00:29, lr=0.001, loss=1.72, val_loss=1.79]
+Epoch 3/10:  72% |█████████████████████▋        | 42/58 [00:22, lr=0.000999, loss=1.68]
 ...
 ```
 
 ## Using Evaluator Callback
 
-Evaluator callbacks can be used to evaluate the model at each step or epoch and log the results to the trainer. You can create your own evaluators by inheriting from the `BaseEvaluator` class and implementing the `calc_step_metrics` and `calc_epoch_metrics` methods. Additionally, an in-built evaluator called `TorchMetricsEvaluator` is available, which accepts torchmetrics metrics. Here's how to use it:
+Evaluator callbacks can be used to evaluate the model at each step or epoch and log the results to the trainer. You can create your own evaluators by inheriting from the `BaseEvaluator` class and implementing the `calc_metrics` and `reset_metrics` methods. Additionally, an in-built evaluator called `TorchMetricsEvaluator` is available, which accepts `torchmetrics` metrics. Here's how to use it:
 
 ```python
 import torchmetrics
@@ -118,9 +123,27 @@ history = trainer.fit(
 )
 ```
 ```
-Epoch 1/10: 100% |██████████████████████████████| 50/50 [00:01, loss=0.313, acc=0.869, precision=0.87, recall=0.884, auc=0.941, f1=0.87]
-Epoch 2/10:  72% |█████████████████████▌        | 36/50 [00:00, loss=0.212, acc=0.905, precision=0.906, recall=0.89] 
+Epoch 1/10: 100% |██████████████████████████████| 50/50 [00:56, loss=0.886, acc=0.746, auc=0.946, f1=0.726, precision=0.751, recall=0.746]
+Epoch 2/10:  72% |█████████████████████▌        | 36/50 [00:35, loss=0.253, acc=0.923, auc=0.996, f1=0.92, precision=0.925, recall=0.923] 
 ```
+
+## Metrics Logging and Plots
+While training, all metrics are logged to a .csv file in the experiments directory. Right before finishing the training, all metrics are plotted and saved. You can easily plot the generated figure by calling:
+
+```python
+trainer.plot()
+```
+
+![](assets\results_example.png)
+
+You can also customize your own figures with different colors, select which metrics to show, and save them to a different file:
+
+```python
+trainer.plot(metrics=['f1', 'auc'], colors=[['#000000', '#1f77b4'], ['#2B2F42', '#EF233C']], dest_path=exp_path/'customization_example.png')
+```
+
+![](assets\customization_example.png)
+
 
 ## Extending Trainer Functionality
 
@@ -202,3 +225,5 @@ Epoch 3/10
 ```
 
 Additionally, you can inspect `pbars.py` file to see how to create your own Progress Bar designs.
+
+
