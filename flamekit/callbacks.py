@@ -125,7 +125,7 @@ class TorchMetricsEvaluator(BaseEvaluator):
         super().__init__()
         self.step_metrics:torchmetrics.MetricCollection = None
         
-    def add_metrics(self, metrics:dict[str, torchmetrics.Metric]):
+    def add_metrics(self, metrics:dict):
         if self.step_metrics is None:
             self.step_metrics = torchmetrics.MetricCollection(metrics)
         else:
