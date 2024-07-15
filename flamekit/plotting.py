@@ -20,14 +20,14 @@ style_rc_params = {
     #"axes.grid.axis": "y",
 }
 
-def plot_curves(ax:plt.Axes, x, ys:dict, colors:list=None, add_label_text=False) -> plt.Axes:
+def plot_curves(ax:plt.Axes, ys:dict, x=None, colors:list=None, add_label_text=False) -> plt.Axes:
     """ 
     Plot multiple curves in a single axis.
 
     Args:
         ax (plt.Axes): Matplotlib axis object.
-        x (list or np.ndarray): X-axis values.
         ys (dict): Dictionary with curve labels as keys and curve values as values.
+        x (list or np.ndarray, optional): X-axis values.
         colors (list, optional): List of colors to use for each curve. If not provided,
             default matplotlib colors will be used.
         add_label_text (bool): Whether to add label text to the plot instead of using the
@@ -36,6 +36,10 @@ def plot_curves(ax:plt.Axes, x, ys:dict, colors:list=None, add_label_text=False)
     Returns:
         plt.Axes: The axis object with the plotted curves.
     """
+    if not x:
+        nelements = [len(y) for y in ys.values()]
+        x = np.arange(1, max(nelements) + 1)
+    
     for i, (label, y) in enumerate(ys.items()):
         # Line
         color = colors[i] if colors else None
@@ -74,15 +78,15 @@ def plot_curves(ax:plt.Axes, x, ys:dict, colors:list=None, add_label_text=False)
     return ax
 
 
-def plot_curve_groups(x, groups:list[dict], ncols=3, colors=None, 
+def plot_curve_groups(groups:list[dict], x=None, ncols=3, colors=None, 
                       add_label_text=False, dest_path=None, callback:callable=None):
     """ 
     Plot multiple groups of curves in subplots.
     
     Args:
-        x (list or np.ndarray): X-axis values.
         groups (list of dict): List of dictionaries, where each dictionary contains
             curve labels as keys and curve values as values.
+        x (list or np.ndarray, optional): X-axis values.
         ncols (int): Number of columns in the subplot grid.
         colors (list, optional): List of colors to use for plotting. If not provided, default 
                 matplotlib colors will be used. Can be a list of lists, containing the colors for 
@@ -118,9 +122,9 @@ def plot_curve_groups(x, groups:list[dict], ncols=3, colors=None,
                         raise ValueError(f"Invalid type for colors: {type(c)}")
                 # Callback function to customize axis
                 if callback:
-                    callback(i, ax, x, group, c)
+                    callback(i, ax, group, c)
                 # Plot curves
-                ax = plot_curves(ax, x, group, colors=c, add_label_text=add_label_text)
+                ax = plot_curves(ax, group, x=x, colors=c, add_label_text=add_label_text)
             else:
                 # Remove unused axes
                 fig.delaxes(ax)
@@ -173,18 +177,14 @@ def plot_results(results:list[dict], names:list[str]=None, colors=None, filter_k
         groups.append(group)
     
     # Plot results
-    def customize_axis(idx:int, ax, x, group:dict, colors):
+    def customize_axis(idx:int, ax, group:dict, colors):
         title = keys_to_display[idx]
         ax.set_title(title)
         ax.set_xlabel('Epoch')
         ax.set_ylabel('Value')
-        ax.set_xticks(x)
     
-    nelements = [len(r[common_keys[0]]) for r in results]
-    x = range(1, max(nelements)+1)
-            
     fig, axes = plot_curve_groups(
-        x, groups, callback=customize_axis,
+        groups, callback=customize_axis,
         colors=colors, add_label_text=add_label_text, dest_path=dest_path)
     if show:
         plt.tight_layout()

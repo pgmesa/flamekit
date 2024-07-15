@@ -378,14 +378,12 @@ class TorchTrainer:
                     group_colors.append(self.val_color if 'val_' in k else self.train_color)
                 colors.append(group_colors)
         # Plot curve groups
-        def customize_axis(idx:int, ax:plt.Axes, x, group:dict, colors):
+        def customize_axis(idx:int, ax:plt.Axes, group:dict, colors):
             title = list(group.keys())[0].replace('val_', '').replace('_', ' ').capitalize()
             ax.set_title(title)
             ax.set_xlabel('Epoch')
             ax.set_ylabel('Value')
-            ax.set_xticks(x)
             
-        x = range(1, self.current_epoch+1)
-        fig, axes = plot_curve_groups(x, groups, ncols=self.results_ncols, colors=colors,
+        fig, axes = plot_curve_groups(groups, ncols=self.results_ncols, colors=colors,
                           add_label_text=add_label_text, dest_path=dest_path, callback=customize_axis)
         return fig, axes

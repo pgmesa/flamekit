@@ -134,16 +134,20 @@ While training, all metrics are logged to a .csv file in the experiments directo
 trainer.plot()
 ```
 
-![](assets\results_example.png)
+![Results Example](assets\results_example.png)
 
-You can also customize your own figures with different colors, select which metrics to show, and save them to a different file:
+You can customize your own figures with different colors, select which metrics to show, and save them to a different file:
 
 ```python
 trainer.plot(metrics=['f1', 'auc'], colors=[['#000000', '#1f77b4'], ['#2B2F42', '#EF233C']], dest_path=exp_path/'customization_example.png')
 ```
 
-![](assets\customization_example.png)
+![Customization Example](assets\customization_example.png)
 
+
+You can also compare the results of different experiments with a few lines of code (`/examples/compare_results.ipynb`):
+
+![Results Comparison Example](assets\compare_results.png)
 
 ## Extending Trainer Functionality
 
