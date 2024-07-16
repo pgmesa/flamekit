@@ -48,7 +48,9 @@ class ProgressBar(Callback):
         self.update_pbar_metrics(self.pbar, trainer.get_step_metrics())
         
     def on_fit_epoch_end(self, trainer, model):
+        self.update_pbar_metrics(self.pbar, trainer.get_step_metrics())
         self.pbar.close()
+        
     # ============== Predict ==============
     def on_predict_epoch_start(self, trainer, model) -> None:
         desc = None

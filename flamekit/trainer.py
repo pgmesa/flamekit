@@ -206,8 +206,8 @@ class TorchTrainer:
                 self.__validate(validation_loader, callbacks=callbacks)
                 for c in callbacks: c.on_validation_epoch_end(self, self.model)
                     
-            self.__record_and_clear_step_logs()
             for c in callbacks: c.on_fit_epoch_end(self, self.model)
+            self.__record_and_clear_step_logs()
             
             if dest_path is not None:
                 if not isinstance(dest_path, Path):
@@ -379,7 +379,7 @@ class TorchTrainer:
                 colors.append(group_colors)
         # Plot curve groups
         def customize_axis(idx:int, ax:plt.Axes, group:dict, colors):
-            title = list(group.keys())[0].replace('val_', '').replace('_', ' ').capitalize()
+            title = list(group.keys())[0].replace('val_', '').replace('_', ' ')
             ax.set_title(title)
             ax.set_xlabel('Epoch')
             ax.set_ylabel('Value')

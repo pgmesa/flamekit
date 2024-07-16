@@ -33,7 +33,7 @@ from flamekit.trainer import TorchTrainer
 from flamekit.callbacks import Callback
 from flamekit.pbars import TQDMProgressBar
 from flamekit.utils import get_next_experiment_path, set_up_reproducible_env
-from flamekit.lr_scheduler import LRScheduler, CosineDecay, LinearDecay
+from flamekit.var_scheduler import VariableScheduler, CosineDecay, LinearDecay
 
 set_up_reproducible_env(seed=1337)
 
@@ -46,7 +46,7 @@ lr_decay_fn = CosineDecay(k=2)
 class TrainingStrategy(Callback):
     
     def __init__(self) -> None:
-        self.lr_scheduler = LRScheduler(
+        self.lr_scheduler = VariableScheduler(
             lr0, lrf, lr_decay_it, warmup_it=warmup_it, decay_fn=lr_decay_fn
         )
         
