@@ -135,7 +135,7 @@ def plot_curve_groups(groups:list[dict], x=None, ncols=3, colors=None,
         return fig, axes
 
 
-def plot_results(results:list[dict], names:list[str]=None, colors=None, filter_keys:callable=None,
+def plot_results(results:list[dict], names:list[str]=None, x=None, x_label='Epoch', ncols=3, colors=None, filter_keys:callable=None,
                         add_label_text=False, dest_path=None, show=True, verbose=True):
     """  
     Plot the results of multiple experiments in the same plot.
@@ -180,17 +180,14 @@ def plot_results(results:list[dict], names:list[str]=None, colors=None, filter_k
     def customize_axis(idx:int, ax, group:dict, colors):
         title = keys_to_display[idx]
         ax.set_title(title)
-        ax.set_xlabel('Epoch')
+        ax.set_xlabel(x_label)
         ax.set_ylabel('Value')
     
     fig, axes = plot_curve_groups(
-        groups, callback=customize_axis,
+        groups, callback=customize_axis, x=x, ncols=ncols,
         colors=colors, add_label_text=add_label_text, dest_path=dest_path)
     if show:
         plt.tight_layout()
         plt.show()
     else:
         plt.close(fig)
-
-    
-    
