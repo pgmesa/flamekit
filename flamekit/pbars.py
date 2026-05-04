@@ -1,5 +1,8 @@
 
+from typing import Any
+
 import tqdm
+
 from flamekit.callbacks import Callback
 
 
@@ -76,7 +79,7 @@ class TQDMProgressBar(ProgressBar):
     def __init__(self, pbar_size:int=30, ascii=None, desc_above=False,
                  show_desc=True, show_elapsed_time=True, show_remaining_time=True, show_rate=True,
                  show_postfix=True, show_n_fmt=True, show_total_fmt=True, show_percentage=True,
-                 pbar_frames=('|','|'), l_bar=None, r_bar=None) -> None:
+                 pbar_frames=('|','|'), l_bar=None, r_bar=None, ignore_metrics: list[str] = None) -> None:
         """ 
         Customizable terminal progress bar using tqdm.
         
@@ -94,6 +97,7 @@ class TQDMProgressBar(ProgressBar):
             show_postfix (bool, optional): If True, the postfix is displayed. Defaults to True.
             show_n_fmt (bool, optional): If True, the number format is displayed. Defaults to True.
             show_total_fmt (bool, optional): If True, the total format is displayed. Defaults to True.
+            ignore_metrics: Names of metrics to not display.
         
         Returns:
             None.
@@ -133,6 +137,8 @@ class TQDMProgressBar(ProgressBar):
         
         self.pbar = None
         self.predict_pbar = None
+
+        self.ignore_metrics: set[str] = set(ignore_metrics) if ignore_metrics else set()
     
     def create_pbar(self, desc, total) -> tqdm.tqdm:
         """ Creates the progress bar. """
@@ -145,9 +151,10 @@ class TQDMProgressBar(ProgressBar):
             ascii=self.ascii,
             total=total)
         
-    def update_pbar_metrics(self, pbar, metrics):
+    def update_pbar_metrics(self, pbar: tqdm.tqdm, metrics: list[tuple[str, Any]]):
         """ Updates the progress bar with the given metrics. """
-        pbar.set_postfix(ordered_dict=metrics)
+        display_metrics = [m for m in metrics if m[0] not in self.ignore_metrics]
+        pbar.set_postfix(ordered_dict=display_metrics)
         
     def build_pbar_format(self) -> str:
         """ 
