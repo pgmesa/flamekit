@@ -50,6 +50,7 @@ class TorchTrainer:
         self.train_color = '#1f77b4' # Blue
         self.val_color = '#ff7f0e'   # Orange
         self.extension = 'pt'
+        self.plot_customize_axis = None
         
     def compile(self, optimizer:optim.Optimizer, criterion:nn.Module=None):
         self.optimizer = optimizer
@@ -133,7 +134,7 @@ class TorchTrainer:
     
     def __record_in_history(self, metrics:list[tuple]):
         for (k,v) in metrics:
-            assert type(v) is float or type(v) is np.float_, f"Metric value recorded is not 'float' but '{type(v)}'"
+            assert isinstance(v, (float, np.floating)), f"Metric value recorded is not 'float' but '{type(v)}'"
             if self.history.get(k, False):
                 if len(self.history[k]) == self.current_epoch:
                     self.history[k].append(v)
@@ -181,10 +182,25 @@ class TorchTrainer:
         values = [v[0] for v in self.step_logs.values()]
         return list(zip(self.step_logs.keys(), values))  
     
-    def fit(self, train_loader, epochs, validation_loader=None, dest_path:'str | Path'=None, prefix=None,
-                save_best=True, monitor='val_loss', mode='min', callbacks:list[Callback]=[TQDMProgressBar()]):
+    def fit(
+        self, 
+        train_loader, 
+        epochs: int,
+        *,
+        validation_loader=None, 
+        dest_path:'str | Path'=None, 
+        prefix: str = None,
+        save_best: bool = True, 
+        monitor: str = 'val_loss', 
+        mode: str = 'min',
+        callbacks: list[Callback] = None
+    ):
         if not self.is_compiled():
             raise RuntimeError("You have to compile the trainer before calling 'fit'")
+        
+        if callbacks is None:
+            callbacks = [TQDMProgressBar()]
+        
         self.training = True
         self.terminate = False
         self.num_training_batches = len(train_loader)
@@ -222,13 +238,15 @@ class TorchTrainer:
         self.training = False
         for c in callbacks: c.on_fit_end(self, self.model)
         if dest_path is not None: 
-            fig, _ = self.__plot_results(dest_path/'results.png')
+            fig, _ = self.__plot_results(
+                dest_path/'results.png', customize_axis=self.plot_customize_axis
+            )
             plt.close(fig)
         print("[END] Training finished")
     
         return self.history
     
-    def loss_step(self, outputs, labels, stage:str=TRAIN) -> torch.Tensor:
+    def loss_step(self, outputs, labels, stage: str = TRAIN) -> torch.Tensor:
         """ 
         Computes the loss for a given set of model predictions and labels and processes the criterion output,
         which can be either a tensor or a scalar and logs the result. 
@@ -251,7 +269,7 @@ class TorchTrainer:
         elif loss.numel() > 1:
             raise ValueError("Loss must be scalar")
         
-        name = 'loss' if stage != self.VAL else 'val_loss'
+        name = f'{stage}_loss' if stage != self.TRAIN else 'loss'
         self.log([(name, loss.item())])
         return loss
     
@@ -266,7 +284,7 @@ class TorchTrainer:
         step_loss = self.loss_step(outputs, labels, self.TRAIN)
         return outputs, step_loss
     
-    def __train(self, train_loader, callbacks:list[Callback]=None) -> tuple:
+    def __train(self, train_loader, callbacks: list[Callback] = None) -> tuple:
         """ Train model for one epoch """
         self.model.train()
         for batch_idx, data in enumerate(train_loader):
@@ -283,7 +301,7 @@ class TorchTrainer:
         self.loss_step(outputs, labels, self.VAL)
         return outputs
     
-    def __validate(self, validation_loader, callbacks:list[Callback]=[]) -> tuple:
+    def __validate(self, validation_loader, callbacks: list[Callback] = []) -> tuple:
         """ Validate model with validation data """
         self.model.eval()
         with torch.no_grad():
@@ -300,7 +318,10 @@ class TorchTrainer:
         self.loss_step(outputs, labels, self.PREDICT)
         return outputs
     
-    def predict(self, test_loader, callbacks:list=[TQDMProgressBar()]):
+    def predict(self, test_loader, callbacks: list[Callback] = None):
+        if callbacks is None:
+            callbacks = [TQDMProgressBar()]
+
         self.model.eval()
         self.num_predict_batches = len(test_loader)
         assert not self.model.training, "Model is in training mode"
@@ -320,21 +341,27 @@ class TorchTrainer:
             self.__record_and_clear_step_logs()
         
         for c in callbacks: c.on_predict_end(self, self.model)
-    
-    def plot(self, metrics:list=None, add_label_text=False, dest_path=None, colors:list=None):
-        """ 
-        Plots metrics from history and optionally saves the plot to a file.
-        
+
+    def plot(self, metrics: list = None, add_label_text=False, dest_path=None,
+         colors: list = None, customize_axis: callable = None, ncols: int = None):
+        """
+        Plot metrics from history and optionally save the plot to a file.
+
         Args:
-            metrics (list, optional): List of metric names to plot. If not provided, all available 
-                metrics will be plotted.
-            add_label_text (bool, optional): Whether to add label text to the plot instead of using 
-                the legend. Defaults to False.
-            dest_path (str or Path, optional): Path to save the plot. If not provided, the plot will 
-                only be displayed.
-            colors (list, optional): List of colors to use for plotting. If not provided, default 
-                matplotlib colors will be used. Can be a list of lists, containing the colors for each
-                metric group or a single list with same colors to use for all metrics.
+            metrics (list, optional): List of metric names to plot. If not provided,
+                all available metrics will be plotted.
+            add_label_text (bool, optional): Whether to add label text to the plot
+                instead of using the legend. Defaults to False.
+            dest_path (str or Path, optional): Path to save the plot. If not provided,
+                the plot will only be displayed.
+            colors (list, optional): List of colors to use for plotting. If not provided,
+                default matplotlib colors will be used. Can be a list of lists, containing
+                the colors for each metric group or a single list with same colors to use
+                for all metrics.
+            customize_axis (callable, optional): Function called after the default axis
+                setup for each subplot. Signature: (idx, ax, group, colors) where idx is
+                the subplot index, ax is the matplotlib Axes, group is the dict of curves
+                for that subplot, and colors is the color list for that group.
         """
         if not metrics:
             keys = self.history.keys()
@@ -344,32 +371,50 @@ class TorchTrainer:
                 if k not in self.history:
                     if 'val_'+k not in self.history:
                         raise ValueError(f"Metric '{k}' not found in history")
-                elif k not in keys: 
+                elif k not in keys:
                     keys.append(k)
                 if 'val_' not in k and 'val_'+k in self.history and 'val_'+k not in keys:
                     keys.append('val_'+k)
-        self.__plot_results(dest_path, keys=keys, colors=colors, add_label_text=add_label_text)
+        self.__plot_results(dest_path, keys=keys, colors=colors, ncols=ncols,
+                            add_label_text=add_label_text, customize_axis=customize_axis)
         plt.tight_layout()
         plt.show()
-        
-    def __plot_results(self, dest_path=None, keys:list=None, colors=None, add_label_text=False):
-        # Create groups of metrics (plot training and val metrics together)
+
+    def __plot_results(self, dest_path=None, keys: list = None, colors=None,
+                    add_label_text=False, customize_axis: callable = None, ncols: int = None):
+        """
+        Build grouped metric plots and optionally save the figure.
+
+        Args:
+            dest_path (str or Path, optional): Path to save the figure.
+            keys (list, optional): Subset of history keys to include. If None,
+                all keys are used.
+            colors (list, optional): Colors for each curve group. If None,
+                train/val colors from the trainer instance are used.
+            add_label_text (bool, optional): Whether to add inline label text
+                instead of a legend. Defaults to False.
+            customize_axis (callable, optional): User callback applied after
+                default axis configuration. Signature: (idx, ax, group, colors).
+
+        Returns:
+            tuple: (fig, axes) from the underlying plot_curve_groups call.
+        """
         groups = []
         dic = self.history
         if keys is not None:
-            dic = {k:v for (k, v) in dic.items() if k in keys}
-        metrics = {k:v for (k, v) in dic.items() if not k.startswith('val_')}
-        val_metrics = {k:v for (k, v) in dic.items() if k.startswith('val_')}
+            dic = {k: v for (k, v) in dic.items() if k in keys}
+        metrics = {k: v for (k, v) in dic.items() if not k.startswith('val_')}
+        val_metrics = {k: v for (k, v) in dic.items() if k.startswith('val_')}
         for (k, v) in metrics.items():
             val_name = 'val_'+k
             if val_name in val_metrics:
                 val_v = val_metrics.pop(val_name)
-                groups.append({k:v, val_name:val_v})
+                groups.append({k: v, val_name: val_v})
             else:
-                groups.append({k:v})
-        for (k, v) in val_metrics.items(): # Remaining val metrics
-            groups.append({k:v})
-        # Define curve colors
+                groups.append({k: v})
+        for (k, v) in val_metrics.items():
+            groups.append({k: v})
+
         if colors is None:
             colors = []
             for group in groups:
@@ -377,13 +422,18 @@ class TorchTrainer:
                 for k in group.keys():
                     group_colors.append(self.val_color if 'val_' in k else self.train_color)
                 colors.append(group_colors)
-        # Plot curve groups
-        def customize_axis(idx:int, ax:plt.Axes, group:dict, colors):
+
+        def default_customize(idx, ax, group, c):
             title = list(group.keys())[0].replace('val_', '').replace('_', ' ')
             ax.set_title(title)
             ax.set_xlabel('Epoch')
             ax.set_ylabel('Value')
-            
-        fig, axes = plot_curve_groups(groups, ncols=self.results_ncols, colors=colors,
-                          add_label_text=add_label_text, dest_path=dest_path, callback=customize_axis)
+            if customize_axis is not None:
+                customize_axis(idx, ax, group, c)
+        
+        ncols = ncols if ncols is not None else self.results_ncols
+
+        fig, axes = plot_curve_groups(
+            groups, ncols=ncols, colors=colors,
+            add_label_text=add_label_text, dest_path=dest_path, callback=default_customize)
         return fig, axes
