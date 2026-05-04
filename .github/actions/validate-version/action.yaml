@@ -1,0 +1,26 @@
+name: Validate tag matches code version
+description: Validates that git tag (vX.Y.Z) matches __version__ in a file
+
+inputs:
+  tag:
+    description: Git tag name (e.g. v1.2.3)
+    required: true
+
+  version_file:
+    description: Path to file containing __version__ variable
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+
+    - name: Validate tag vs code version
+      shell: bash
+      run: |
+        python "${{ github.action_path }}/validate.py" \
+          --tag "${{ inputs.tag }}" \
+          --version-file "${{ inputs.version_file }}"

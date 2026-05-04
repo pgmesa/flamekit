@@ -3,7 +3,7 @@ name: Publish to PyPI
 on:
   push:
     tags:
-      - "*"
+      - "v*"
 
 jobs:
   build-and-publish:
@@ -15,9 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate tag matches code version
+        uses: ./.github/actions/validate-version
+        with:
+          tag: ${{ github.ref_name }}
+          version_file: flamekit/__init__.py
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Install build tools
         run: pip install build
