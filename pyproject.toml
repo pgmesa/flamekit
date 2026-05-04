@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flamekit"
+version = "0.2.4"
+description = "Minimalistic toolkit for PyTorch"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [
+    { name = "Pablo García Mesa", email = "pgmesa.sm@gmail.com" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3.9",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "torch",
+    "numpy",
+    "matplotlib"
+]
+
+[project.urls]
+Homepage = "https://github.com/pgmesa/flamekit"
+
+[tool.setuptools.packages.find]
+include = ["flamekit*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "flamekit.__version__" }
